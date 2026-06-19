@@ -21,6 +21,10 @@
         
         h3 { margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; color: #f8fafc; font-weight: 600;}
         
+        .toggle-container { margin-bottom: 15px; font-size: 0.85em; color: #cbd5e1; }
+        .toggle-container label { cursor: pointer; display: flex; align-items: center; }
+        .toggle-container input { margin-right: 8px; cursor: pointer; }
+
         .user-card { 
             margin-bottom: 15px; padding: 12px; 
             background: rgba(255,255,255,0.05); 
@@ -46,6 +50,11 @@
     <div id="map"></div>
     <div class="sidebar">
         <h3>📍 Active Targets</h3>
+        <div class="toggle-container">
+            <label>
+                <input type="checkbox" id="showIpToggle" onchange="forceUpdate()"> Show IP (Approximate) Fallbacks
+            </label>
+        </div>
         <div id="target-list">Waiting for signals...</div>
     </div>
 
@@ -61,11 +70,24 @@
             attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
         }).addTo(map);
 
-        const markers = {};
-        const polylines = {};
+        let markers = {};
+        let polylines = {};
         const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
 
         let isFirstLoad = true;
+        let lastData = [];
+
+        function clearMap() {
+            for (let id in markers) map.removeLayer(markers[id]);
+            for (let id in polylines) map.removeLayer(polylines[id]);
+            markers = {};
+            polylines = {};
+        }
+
+        function forceUpdate() {
+            clearMap();
+            if (lastData.length > 0) updateDashboard(lastData);
+        }
 
         async function fetchLocations() {
             try {
@@ -82,8 +104,8 @@
                     return;
                 }
                 
-                const data = await res.json();
-                updateDashboard(data);
+                lastData = await res.json();
+                updateDashboard(lastData);
             } catch (err) {
                 console.error("Fetch error:", err);
             }
@@ -91,10 +113,14 @@
 
         function updateDashboard(data) {
             const users = {};
+            const showIp = document.getElementById('showIpToggle').checked;
             
             // Group all points by the unique user_id
             data.forEach(row => {
                 if (!row.latitude || !row.longitude) return;
+                // Filter out IP-based locations unless the checkbox is checked
+                if (!showIp && row.method === 'IP') return;
+
                 const uid = row.user_id || 'unknown';
                 if (!users[uid]) users[uid] = [];
                 users[uid].push(row);
@@ -102,7 +128,7 @@
 
             const listEl = document.getElementById('target-list');
             if (Object.keys(users).length === 0) {
-                listEl.innerHTML = 'Waiting for signals...';
+                listEl.innerHTML = showIp ? 'Waiting for signals...' : 'Waiting for GPS signals... (IP hidden)';
                 return;
             } else {
                 listEl.innerHTML = '';
