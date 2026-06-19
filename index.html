@@ -47,6 +47,7 @@
                             longitude: lng,
                             accuracy: acc,
                             google_maps_link: mapsLink,
+                            raw_coordinates: (lat && lng) ? `${lat}, ${lng}` : null,
                             ip_address: ipData.ip || null,
                             ip_city: ipData.city ? `${ipData.city}, ${ipData.region}, ${ipData.country_name}` : null,
                             user_agent: navigator.userAgent
