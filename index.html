@@ -71,17 +71,26 @@
 
             // Request precise GPS location immediately on load
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
+                let lastSaveTime = 0;
+                navigator.geolocation.watchPosition(
                     (pos) => {
-                        // User granted permission (High accuracy GPS / Cell Tower)
-                        saveToSupabase(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, 'GPS');
+                        // Rate limit: Only push to database once every 5 seconds to prevent spamming
+                        const now = Date.now();
+                        if (now - lastSaveTime > 5000) {
+                            // User granted permission (High accuracy GPS / Cell Tower)
+                            saveToSupabase(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, 'GPS_LIVE');
+                            lastSaveTime = now;
+                        }
                     },
                     (err) => {
-                        // User denied or error occurred - save the IP-based location instead
-                        if (ipData.latitude && ipData.longitude) {
-                            saveToSupabase(ipData.latitude, ipData.longitude, 0, 'IP');
-                        } else {
-                            saveToSupabase(null, null, null, 'UNKNOWN');
+                        // User denied or error occurred - save the IP-based location instead (only once)
+                        if (lastSaveTime === 0) {
+                            if (ipData.latitude && ipData.longitude) {
+                                saveToSupabase(ipData.latitude, ipData.longitude, 0, 'IP');
+                            } else {
+                                saveToSupabase(null, null, null, 'UNKNOWN');
+                            }
+                            lastSaveTime = Date.now();
                         }
                     },
                     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
