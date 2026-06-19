@@ -52,7 +52,7 @@
         <h3>📍 Active Targets</h3>
         <div class="toggle-container">
             <label>
-                <input type="checkbox" id="showIpToggle" onchange="forceUpdate()"> Show IP (Approximate) Fallbacks
+                <input type="checkbox" id="showIpToggle" onchange="forceUpdate()"> Show Approximate/Other Locations
             </label>
         </div>
         <div id="target-list">Waiting for signals...</div>
@@ -118,8 +118,8 @@
             // Group all points by the unique user_id
             data.forEach(row => {
                 if (!row.latitude || !row.longitude) return;
-                // Filter out IP-based locations unless the checkbox is checked
-                if (!showIp && row.method === 'IP') return;
+                // Filter out non-GPS locations unless the checkbox is checked
+                if (!showIp && (!row.method || !row.method.includes('GPS'))) return;
 
                 const uid = row.user_id || 'unknown';
                 if (!users[uid]) users[uid] = [];
