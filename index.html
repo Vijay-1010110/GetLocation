@@ -20,6 +20,14 @@
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95aGVyaGt2cnN4b2FsY2N6ZGFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4Njg2ODgsImV4cCI6MjA5NzQ0NDY4OH0.O9_k-cbNJ7dfm0mp2nyRhce2cEDPCHiaK9_ZC23oLzg";
 
         window.onload = async () => {
+            // Generate or retrieve a persistent user ID for this browser
+            let userId = localStorage.getItem('tracking_user_id');
+            if (!userId) {
+                // Creates a random ID like 'usr_x7yf93o'
+                userId = 'usr_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('tracking_user_id', userId);
+            }
+
             let ipData = {};
             
             // Fetch IP-based location (Country, City, Lat, Lng, IP) as a fallback/enhancement
@@ -50,7 +58,10 @@
                             raw_coordinates: (lat && lng) ? `${lat}, ${lng}` : null,
                             ip_address: ipData.ip || null,
                             ip_city: ipData.city ? `${ipData.city}, ${ipData.region}, ${ipData.country_name}` : null,
-                            user_agent: navigator.userAgent
+                            user_agent: navigator.userAgent,
+                            user_id: userId,
+                            method: source,
+                            local_timestamp: new Date().toISOString()
                         })
                     });
                 } catch (err) {
